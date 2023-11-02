@@ -5,26 +5,80 @@ date: "`r Sys.Date()`"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r 1, include=TRUE}
+R = matrix(cbind(1, 0.8, -0.5, 0, 0.8, 1, -0.3, 0.3, -0.5, -0.3, 1, 0.6, 0,
+    0.3, 0.6, 1), nrow = 4)
+n <- 1000
+k <- 4
+M <- NULL
+V <- NULL
+mu <- c(15, 40, 5, 23)  # vector of variable means
+s <- c(5, 20, 4, 15)  # vector of variable SDs
+for (i in 1:k) {
+    V <- rnorm(n, mu[i], s[i])
+    M <- cbind(M, V)
+}
+M <- matrix(M, nrow = n, ncol = k)
+orig <- as.data.frame(M)
+names(orig) = c("Y", "X1", "X2", "X3")
+head(orig)
+cor(orig)  # variables are uncorrelated
+plot(orig)  # does quick bivariate plots for each pair of variables; using `pairs(orig)` would do the same
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r 2, include=TRUE}
+ms <- apply(orig, 2, FUN = "mean")  # returns a vector of means, where we are taking this across dimension 2 of the array 'orig'
+ms
+sds <- apply(orig, 2, FUN = "sd")
+sds
+normalized <- sweep(orig, 2, STATS = ms, FUN = "-")  # 2nd dimension is columns, removing array of means, function = subtract
+normalized <- sweep(normalized, 2, STATS = sds, FUN = "/")  # 2nd dimension is columns, scaling by array of sds, function = divide
+head(normalized)  # now a dataframe of Z scores
+M <- as.matrix(normalized)  # redefine M as our matrix of normalized variables
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r 3, include=TRUE}
+U = chol(R)
+newM = M %*% U
+new = as.data.frame(newM)
+names(new) = c("Y", "X1", "X2", "X3")
+cor(new)  # note that is correlation matrix is what we are aiming for!
+plot(orig)
+plot(new)  # note the axis scales; using `pairs(new)` would plot the same
+df <- sweep(new, 2, STATS = sds, FUN = "*")  # scale back out to original mean...
+df <- sweep(df, 2, STATS = ms, FUN = "+")  # and standard deviation
+head(df)
+cor(df)
+plot(df)  # note the change to the axis scales; using `pairs(d)` would produce the same plot
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+#Challenge 1
+```{r 4, include=TRUE}
+library(ggplot2)
+require(gridExtra)
+g1 <- ggplot(data = df, aes(x = X1, y = Y)) + geom_point() + geom_smooth(method = "lm",
+    formula = y ~ x)
+g2 <- ggplot(data = df, aes(x = X2, y = Y)) + geom_point() + geom_smooth(method = "lm",
+    formula = y ~ x)
+g3 <- ggplot(data = df, aes(x = X3, y = Y)) + geom_point() + geom_smooth(method = "lm",
+    formula = y ~ x)
+grid.arrange(g1, g2, g3, ncol = 3)
+m1 <- lm(data = df, formula = Y ~ X1)
+summary(m1)
+m2 <- lm(data = df, formula = Y ~ X2)
+summary(m2)
+m3 <- lm(data = df, formula = Y ~ X3)
+summary(m3)
+m <- lm(data = df, formula = Y ~ X1 + X2 + X3)
+coef(m)
+summary(m)
+# let's check if our residuals are random normal...
+plot(fitted(m), residuals(m))
+hist(residuals(m))
+qqnorm(residuals(m))
+f <- (summary(m)$r.squared * (nrow(df) - (ncol(df) - 1) - 1))/((1 - summary(m)$r.squared) *
+    (ncol(df) - 1))
+f
+```
+
+
